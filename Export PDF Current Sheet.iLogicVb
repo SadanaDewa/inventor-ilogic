@@ -1,0 +1,97 @@
+﻿'{Export Active Sheet to PDF to "PDF Export" folder in project directory}
+
+'---------------------------------------------------------------------------------------------------------
+'-  CEK: only drawing file
+'---------------------------------------------------------------------------------------------------------
+If ThisDoc.Document.DocumentType <> kDrawingDocumentObject Then
+	MessageBox.Show("Rule only valid in drawing files!", "iLogic : File Type Error")
+	Exit Sub
+End If
+
+Dim oDraw As DrawingDocument = ThisApplication.ActiveDocument
+Dim oSheet As Sheet = oDraw.ActiveSheet
+
+' Gunakan nama sheet = nama file
+'Dim sheetName As String = oSheet.Name
+Dim rawName As String = oSheet.Name
+Dim sheetName As String = rawName
+
+' Ambil teks setelah "]" jika ada
+If rawName.Contains("]") Then
+    sheetName = rawName.Substring(rawName.IndexOf("]") + 1)
+End If
+
+' Ambil teks sebelum ":" jika ada
+If sheetName.Contains(":") Then
+    sheetName = sheetName.Substring(0, sheetName.IndexOf(":"))
+End If
+
+' Trim spasi ekstra
+sheetName = sheetName.Trim()
+
+' Hapus karakter ilegal nama file replace _
+Dim invalidChars() As Char = System.IO.Path.GetInvalidFileNameChars()
+For Each c As Char In invalidChars
+    sheetName = sheetName.Replace(c, "_")
+Next
+
+'---------------------------------------------------------------------------------------------------------
+'-  BUAT FOLDER EXPORT pada project aktif
+'---------------------------------------------------------------------------------------------------------
+Dim projectFolder As String = ThisDoc.Path
+Dim exportFolder As String = System.IO.Path.Combine(projectFolder, "PDF Export")
+
+' membuat folder jika belum ada foldernya
+If Not System.IO.Directory.Exists(exportFolder) Then
+    System.IO.Directory.CreateDirectory(exportFolder)
+End If
+
+' Path lengkap file PDF
+Dim pdfPath As String = System.IO.Path.Combine(exportFolder, sheetName & ".pdf")
+
+'---------------------------------------------------------------------------------------------------------
+'- PDF TRANSLATOR
+'---------------------------------------------------------------------------------------------------------
+Dim oPDFAddIn As TranslatorAddIn = ThisApplication.ApplicationAddIns.ItemById("{0AC6FD96-2F4D-42CE-8BE0-8AEA580399E4}")
+If oPDFAddIn Is Nothing Then
+	MessageBox.Show("The DWG add-in could not be found.", "iLogic : Error")
+	Exit Sub
+End If
+
+If Not oPDFAddIn.Activated Then oPDFAddIn.Activate()
+
+Dim oContext As TranslationContext = ThisApplication.TransientObjects.CreateTranslationContext
+oContext.Type = IOMechanismEnum.kFileBrowseIOMechanism
+Dim oOptions As NameValueMap = ThisApplication.TransientObjects.CreateNameValueMap
+Dim oDataMedium As DataMedium = ThisApplication.TransientObjects.CreateDataMedium
+
+' option export
+oOptions.Value("All_Color_AS_Black") = 0
+oOptions.Value("Remove_Line_Weights") = True
+oOptions.Value("Vector_Resolution") = 400
+oOptions.Value("Sheet_Range") = Inventor.PrintRangeEnum.kPrintCurrentSheet
+
+oDataMedium.FileName = pdfPath
+
+'---------------------------------------------------------------------------------------------------------
+'-  EXPORT
+'---------------------------------------------------------------------------------------------------------
+Try
+	oPDFAddIn.SaveCopyAs(oDraw, oContext, oOptions, oDataMedium)
+	MessageBox.Show("PDF created at: " & vbLf & pdfPath, "iLogic : Success")
+Catch ex As Exception
+	MessageBox.Show("Failed to create PDF: " & ex.Message, "iLogic : Error")
+End Try
+
+
+
+Dim oTtl As String = "Description"
+If iProperties.Value("Summary", "Title") = oTtl
+	oTtl = InputBox("Insert Machine Name (refer to GAD)", "iLogic", iProperties.Value("Summary", "Title"))
+	If oTtl = ""
+		oTtl = "Description"
+	Else
+		iProperties.Value("Summary", "Title") = oTtl
+	End If
+End If
+

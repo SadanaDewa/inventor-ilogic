@@ -1,0 +1,39 @@
+﻿
+If ThisApplication.ActiveDocument.DocumentType <> kPartDocumentObject Then
+	MessageBox.Show("Please run this rule from a Part file (.ipt)", "iLogic")
+	Exit Sub
+End If
+
+Dim oPartDoc As PartDocument = ThisApplication.ActiveDocument
+Dim oCompDef As PartComponentDefinition = oPartDoc.ComponentDefinition
+
+If Not TypeOf oCompDef Is SheetMetalComponentDefinition Then
+	MessageBox.Show("This part is not a Sheet Metal part.", "iLogic")
+	Exit Sub
+End If
+
+Dim oSheetMetalDef As SheetMetalComponentDefinition
+oSheetMetalDef = oCompDef
+
+Dim oFolder As String = oPartDoc.FullFileName
+oFolder = System.IO.Path.GetDirectoryName(oFolder) & "\DXF-Export"
+
+If Not System.IO.Directory.Exists(oFolder) Then
+	System.IO.Directory.CreateDirectory(oFolder)
+End If
+
+Dim partName As String = System.IO.Path.GetFileNameWithoutExtension(oPartDoc.FullFileName)
+Dim dxfFullPath As String = oFolder & "\" & partName & ".dxf"
+
+If oSheetMetalDef.HasFlatPattern = False Then
+	oSheetMetalDef.Unfold
+Else
+	oSheetMetalDef.FlatPattern.Edit
+End If
+
+Dim sOut As String = "FLAT PATTERN DXF?AcadVersion=2004&OuterProfileLayer=IV_OUTER_PROFILE"
+oSheetMetalDef.DataIO.WriteDataToFile(sOut, dxfFullPath)
+
+oSheetMetalDef.FlatPattern.ExitEdit
+
+MessageBox.Show("DXF Exported to: " & dxfFullPath, "Success")

@@ -1,0 +1,110 @@
+﻿'Ubah pdf per sheet (1 sheet 1 pdf)
+'Updated : 13 May 2025
+
+'memastikan file adalah idw
+If ThisDoc.Document.DocumentType <> kDrawingDocumentObject Then
+	MessageBox.Show("Rule only valid in drawing files!", "iLogic : File Type Error")
+	Exit Sub
+End If
+
+Dim oDrawDoc As DrawingDocument = ThisApplication.ActiveDocument
+Dim oSheets As Sheets = oDrawDoc.Sheets
+
+' Buat folder export
+Dim basePath As String = ThisDoc.Path
+Dim pdfFolder As String = System.IO.Path.Combine(basePath, "PDF Export")
+
+If Not System.IO.Directory.Exists(pdfFolder) Then
+	System.IO.Directory.CreateDirectory(pdfFolder)
+End If
+
+Dim oTtl As String = "Description"
+If iProperties.Value("Summary", "Title") = oTtl
+	oTtl = InputBox("Insert Machine Name (refer to GAD)", "iLogic", iProperties.Value("Summary", "Title"))
+	If oTtl = ""
+		oTtl = "Description"
+	Else
+		iProperties.Value("Summary", "Title") = oTtl
+	End If
+End If
+
+' Add-in PDF Export
+Dim oPDFAddIn As TranslatorAddIn
+oPDFAddIn = ThisApplication.ApplicationAddIns.ItemById("{0AC6FD96-2F4D-42CE-8BE0-8AEA580399E4}")
+If oPDFAddIn Is Nothing Then
+	MessageBox.Show("PDF Add-in not found!", "iLogic : Error")
+	Exit Sub
+End If
+
+If Not oPDFAddIn.Activated Then oPDFAddIn.Activate()
+
+Dim oContext As TranslationContext = ThisApplication.TransientObjects.CreateTranslationContext
+oContext.Type = IOMechanismEnum.kFileBrowseIOMechanism
+
+Dim oOptions As NameValueMap = ThisApplication.TransientObjects.CreateNameValueMap
+Dim oDataMedium As DataMedium = ThisApplication.TransientObjects.CreateDataMedium
+
+' Opsi PDF
+oOptions.Value("All_Color_AS_Black") = 0
+oOptions.Value("Remove_Line_Weights") = True
+oOptions.Value("Vector_Resolution") = 400
+oOptions.Value("Sheet_Range") = Inventor.PrintRangeEnum.kPrintCurrentSheet
+
+' Inisialisasi hasil
+Dim exportedSheets As String = ""
+Dim skippedSheets As String = ""
+Dim failedSheets As String = ""
+
+For Each oSheet As Sheet In oSheets
+	Try
+		oSheet.Activate()
+		System.Threading.Thread.Sleep(1000) 'delay aktivasi 1s
+		InventorVb.Application.UserInterfaceManager.DoEvents()
+
+		' Ambil nama yang akan digunakan untuk file
+		Dim rawName As String = oSheet.Name
+		Dim nameForFile As String = rawName
+
+		Dim startIdx As Integer = rawName.IndexOf("]")
+		Dim endIdx As Integer = rawName.IndexOf(":")
+
+		If startIdx >= 0 And endIdx > startIdx Then
+			nameForFile = rawName.Substring(startIdx + 1, endIdx - startIdx - 1).Trim()
+		ElseIf startIdx >= 0 Then
+			nameForFile = rawName.Substring(startIdx + 1).Trim()
+		ElseIf endIdx > 0 Then
+			nameForFile = rawName.Substring(0, endIdx).Trim()
+		End If
+
+		Dim safeFileName As String = System.Text.RegularExpressions.Regex.Replace(nameForFile, "[\/:*?""<>|]", "_")
+		Dim outputFile As String = System.IO.Path.Combine(pdfFolder, safeFileName & ".pdf")
+
+		' Skip jika file sudah ada
+		If System.IO.File.Exists(outputFile) Then
+			skippedSheets &= "- " & oSheet.Name & " (file sudah ada)" & vbLf
+			Continue For
+		End If
+
+		oDataMedium.FileName = outputFile
+		oPDFAddIn.SaveCopyAs(oDrawDoc, oContext, oOptions, oDataMedium)
+		exportedSheets &= "- " & oSheet.Name & vbLf
+
+	Catch ex As Exception
+		failedSheets &= "- " & oSheet.Name & ": " & ex.Message & vbLf
+	End Try
+Next
+
+' Laporan akhir
+Dim msg As String = "Hasil export PDF:" & vbLf & vbLf
+If exportedSheets <> "" Then
+	msg &= "(v) Sheet yang berhasil diekspor:" & vbLf & exportedSheets & vbLf
+End If
+If skippedSheets <> "" Then
+	msg &= "(i)️ Sheet yang **tidak diekspor** (file sudah ada):" & vbLf & skippedSheets & vbLf
+End If
+If failedSheets <> "" Then
+	msg &= "(x) Sheet yang gagal diekspor karena error:" & vbLf & failedSheets
+End If
+
+MessageBox.Show(msg, "iLogic : Export Result")
+
